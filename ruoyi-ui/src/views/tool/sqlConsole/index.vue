@@ -18,6 +18,7 @@
     <div style="margin: 10px 0;">
       <el-button type="primary" :loading="loading" @click="handleExecute">执 行</el-button>
       <el-button :loading="loadingColumns" @click="handleShowColumns">查看字段</el-button>
+      <el-button :loading="loadingTableColumns" @click="handleShowTableColumns">查看表字段</el-button>
       <el-button @click="handleClear">清 空</el-button>
     </div>
 
@@ -41,6 +42,10 @@
       <el-tag v-for="col in columnList" :key="col" style="margin-right: 8px; margin-bottom: 5px;">{{ col }}</el-tag>
     </div>
 
+    <div v-if="tableColumnList.length > 0" style="margin-bottom: 15px;">
+      <el-tag v-for="col in tableColumnList" :key="col" type="success" style="margin-right: 8px; margin-bottom: 5px;">{{ col }}</el-tag>
+    </div>
+
     <el-table
       v-if="columns.length > 0"
       :data="rows"
@@ -60,7 +65,7 @@
 </template>
 
 <script>
-import { executeSql, getSqlColumns } from '@/api/tool/sqlConsole'
+import { executeSql, getSqlColumns, getTableColumns } from '@/api/tool/sqlConsole'
 
 export default {
   name: 'SqlConsole',
@@ -69,9 +74,11 @@ export default {
       sql: '',
       loading: false,
       loadingColumns: false,
+      loadingTableColumns: false,
       columns: [],
       rows: [],
       columnList: [],
+      tableColumnList: [],
       errorMsg: '',
       successMsg: ''
     }
@@ -113,6 +120,7 @@ export default {
       this.columns = []
       this.rows = []
       this.columnList = []
+      this.tableColumnList = []
       this.errorMsg = ''
       this.successMsg = ''
     },
@@ -135,6 +143,27 @@ export default {
         this.errorMsg = err.msg || err.message || '获取字段失败'
       }).finally(() => {
         this.loadingColumns = false
+      })
+    },
+    handleShowTableColumns() {
+      if (!this.sql.trim()) {
+        this.errorMsg = '请输入SQL语句'
+        return
+      }
+      this.loadingTableColumns = true
+      this.errorMsg = ''
+      this.tableColumnList = []
+      getTableColumns(this.sql).then(res => {
+        this.tableColumnList = res.data
+        if (res.data.length === 0) {
+          this.successMsg = '未获取到表字段信息'
+        } else {
+          this.successMsg = '共 ' + res.data.length + ' 个表字段'
+        }
+      }).catch(err => {
+        this.errorMsg = err.msg || err.message || '获取表字段失败'
+      }).finally(() => {
+        this.loadingTableColumns = false
       })
     }
   }

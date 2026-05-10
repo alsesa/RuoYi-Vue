@@ -17,3 +17,12 @@ export function getSqlColumns(sql) {
     data: { sql }
   })
 }
+
+// 解析SQL中的表名，获取所有表的列信息（table.column格式）
+export function getTableColumns(sql) {
+  return request({
+    url: '/tool/sqlConsole/tableColumns',
+    method: 'post',
+    data: { sql }
+  })
+}

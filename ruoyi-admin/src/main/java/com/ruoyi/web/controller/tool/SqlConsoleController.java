@@ -2,8 +2,12 @@ package com.ruoyi.web.controller.tool;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -118,5 +122,78 @@ public class SqlConsoleController extends BaseController
         {
             return AjaxResult.error("执行失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 解析SQL中的表名，获取所有表的列信息（table.column格式）
+     */
+    @PreAuthorize("@ss.hasRole('admin')")
+    @Log(title = "SQL控制台", businessType = BusinessType.OTHER)
+    @PostMapping("/tableColumns")
+    public AjaxResult tableColumns(@RequestBody Map<String, String> params)
+    {
+        String sql = params.get("sql");
+        if (sql == null || sql.trim().isEmpty())
+        {
+            return AjaxResult.error("SQL语句不能为空");
+        }
+        sql = sql.trim();
+
+        try
+        {
+            Set<String> tableNames = extractTableNames(sql);
+            if (tableNames.isEmpty())
+            {
+                return AjaxResult.error("未能从SQL中解析到表名");
+            }
+
+            JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+            List<String> result = new ArrayList<>();
+            for (String table : tableNames)
+            {
+                List<String> columns = jdbcTemplate.queryForList(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? ORDER BY ordinal_position",
+                    String.class, table);
+                for (String col : columns)
+                {
+                    result.add(table + "." + col);
+                }
+            }
+            return AjaxResult.success(result);
+        }
+        catch (Exception e)
+        {
+            return AjaxResult.error("获取表字段失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 从SQL语句中提取表名（支持FROM、JOIN子句）
+     */
+    private Set<String> extractTableNames(String sql)
+    {
+        Set<String> tables = new LinkedHashSet<>();
+        // 去掉SQL中的字符串常量和注释，避免干扰解析
+        String cleanSql = sql.replaceAll("'[^']*'", "")
+                             .replaceAll("--[^\n]*", "")
+                             .replaceAll("/\\*[\\s\\S]*?\\*/", "");
+        // 匹配 FROM 和 JOIN 后面的表名（可选 schema 前缀，可选别名）
+        Pattern pattern = Pattern.compile("(?:FROM|JOIN)\\s+(`?\\w+`?\\.?`?\\w+`?)", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(cleanSql);
+        while (matcher.find())
+        {
+            String raw = matcher.group(1).replace("`", "");
+            // 如果是 schema.table 格式，只取 table 部分
+            if (raw.contains("."))
+            {
+                raw = raw.substring(raw.indexOf('.') + 1);
+            }
+            // 跳过子查询产生的空匹配
+            if (!raw.isEmpty() && !raw.startsWith("("))
+            {
+                tables.add(raw);
+            }
+        }
+        return tables;
     }
 }
